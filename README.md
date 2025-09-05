@@ -241,7 +241,140 @@ Assim, qualquer cliente na rede que tentar acessar `http://<IP_DO_SERVIDOR>:3000
 
 ---
 
-Quer que eu já te monte a versão “corrigida” do final do teu `index.js` (com `0.0.0.0`) e o comando para **logar em tempo real** os erros do serviço com `journalctl -f` enquanto você testa do navegador?
+Boa, esse `curl` matou a charada:
+
+👉 apesar do serviço estar **ativo no systemd**, ele **não está de fato ouvindo na porta 3000**.
+Por isso o `curl` retorna `Connection refused`.
+
+---
+
+### O que pode estar acontecendo:
+
+1. **O Node não subiu certo e morreu silenciosamente**
+   O `systemd` fica de pé, mas o processo Node pode ter crashado na inicialização.
+   👉 Verifica os logs:
+
+   ```bash
+   journalctl -u node-server-webfinancas.service -n 50 --no-pager
+   ```
+
+2. **Execução no diretório errado**
+   No teu service está:
+
+   ```
+   WorkingDirectory=/home/shaffer443/MeusProjetos/Financeiro/webfinancasPessoais/investimentos/dashboard_investimento/myapi
+   ExecStart=/usr/bin/node index.js
+   ```
+
+   Se esse diretório não tiver o `index.js`, ou se o Node não conseguir carregar módulos (`express`, `mysql2`), ele morre logo na largada.
+
+   Testa manualmente dentro desse diretório:
+
+   ```bash
+   cd /home/shaffer443/MeusProjetos/Financeiro/webfinancasPessoais/investimentos/dashboard_investimento/myapi
+   /usr/bin/node index.js
+   ```
+
+   → vê se dá erro.
+
+3. **Permissões de usuário (`www-data`)**
+   Seu service roda como `User=www-data`.
+   Se o `www-data` não tiver acesso ao diretório do projeto ou ao banco, o Node falha na hora de rodar.
+
+   Pra testar, edita o service temporariamente para rodar como seu usuário (`shaffer443`):
+
+   ```
+   User=shaffer443
+   Group=shaffer443
+   ```
+
+   E reinicia:
+
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl restart node-server-webfinancas.service
+   ```
+
+---
+
+### Caminho prático agora:
+
+1. Mostra os logs do serviço:
+
+   ```bash
+   journalctl -u node-server-webfinancas.service -n 50 --no-pager
+   ```
+
+   Isso vai mostrar o erro real.
+
+2. Se quiser já testar rápido: roda manualmente como `www-data` pra simular o systemd:
+
+   ```bash
+   sudo -u www-data /usr/bin/node index.js
+   ```
+
+   → Se der erro de permissão/módulo/banco, aparece direto.
+
+---
+
+Aí está o erro real 👇
+
+```
+app.listen(port,"0.0.0.0" () => {
+                           ^
+SyntaxError: Malformed arrow function parameter list
+```
+
+Ou seja, quando você editou, ficou com a vírgula e os parênteses fora do lugar. O Node está crashando em loop, por isso nada responde.
+
+---
+
+### ✅ Forma correta
+
+O final do `index.js` precisa ficar assim:
+
+```js
+// Iniciar o servidor
+app.listen(port, "0.0.0.0", () => {
+    console.log(`API rodando em http://0.0.0.0:${port}`);
+});
+```
+
+Note a vírgula entre `port` e `"0.0.0.0"`, **e só depois** a arrow function.
+
+---
+
+### 🚀 Passos para corrigir
+
+1. Edita o `index.js` e ajusta a linha final exatamente como acima.
+
+2. Salva.
+
+3. Reinicia o serviço:
+
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl restart node-server-webfinancas.service
+   ```
+
+4. Testa local:
+
+   ```bash
+   curl http://localhost:3000
+   ```
+
+   → Deve aparecer `Bem-vindo à API! ...`.
+
+5. Testa de outro PC:
+
+   ```
+   http://192.168.1.xxx:3000
+   ```
+
+---
+
+
+
 
 
 
