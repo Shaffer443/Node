@@ -179,6 +179,69 @@ Se esse Node que está rodando pelo usuário `www-data` é algo que você config
 
 ---
 
-👉 Pergunto: você mesmo subiu esse processo como serviço, ou parece que ele ficou rodando “sozinho” no servidor? Isso ajuda a decidir se o melhor é **matar e subir manualmente**, ou **gerenciar via systemd/pm2**.
+## Liberando Acesso
+
+Aham! Agora ficou bem claro 👇
+
+No teu `index.js` o servidor está assim:
+
+```js
+app.listen(port, () => {
+    console.log(`API rodando em http://localhost:${port}`);
+});
+```
+
+👉 Isso significa que o Express **só está escutando em `localhost`**, ou seja, apenas dentro da própria máquina.
+De fora da rede (ou de outro computador), você nunca vai conseguir acessar — e isso explica porque o browser não abre a página.
+
+---
+
+### ✅ Como corrigir
+
+Basta trocar o trecho final para que ele escute em todas as interfaces (`0.0.0.0`):
+
+```js
+app.listen(port, "0.0.0.0", () => {
+    console.log(`API rodando em http://0.0.0.0:${port}`);
+});
+```
+
+Assim, qualquer cliente na rede que tentar acessar `http://<IP_DO_SERVIDOR>:3000` vai conseguir conectar.
+
+---
+
+### 🚀 Passos depois da alteração
+
+1. Edita o `index.js` e salva a modificação.
+
+2. Reinicia o serviço:
+
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl restart node-server-webfinancas.service
+   ```
+
+3. Testa dentro do servidor:
+
+   ```bash
+   curl http://localhost:3000
+   ```
+
+   → Deve responder com o texto `"Bem-vindo à API!..."`.
+
+4. Testa de outro computador na rede:
+
+   ```
+   http://192.168.1.xxx:3000
+   ```
+
+---
+
+⚠️ Obs.: como você já está usando CORS configurado para `http://192.168.1.100:9874`, parece que o frontend está rodando nessa máquina. Ou seja, com o ajuste do `0.0.0.0` deve casar certinho com seu frontend.
+
+---
+
+Quer que eu já te monte a versão “corrigida” do final do teu `index.js` (com `0.0.0.0`) e o comando para **logar em tempo real** os erros do serviço com `journalctl -f` enquanto você testa do navegador?
+
 
 
